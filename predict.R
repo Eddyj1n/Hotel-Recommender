@@ -77,17 +77,17 @@ average_revisits_per_user <- visit_counts %>%
     summarise(value = sum(value), .groups = 'drop') %>%
     pivot_wider(names_from = hotel, values_from = value, values_fill = list(value = 0))  
     
-    # Handle edge case, if user user_id 4232, replace row value which is equal to
+  # Handle edge case, if user user_id 4232, replace row value which is equal to 1
     
   # Convert to matrix format suitable for recommenderlab
   user_item_matrix <- as.matrix(user_item_df[, -1])
   user_item_matrix_real <- as(user_item_matrix, "binaryRatingMatrix") # Check this 
   
   # Define evaluation scheme with k-fold cross-validation
-  ubcf_evaluation_scheme <- evaluationScheme(user_item_matrix_real, method = "cross-validation", k = 2, given = -1)
+  ubcf_evaluation_scheme <- evaluationScheme(user_item_matrix_real, method = "cross-validation", k = 3, given = 2)
   
   # Define the recommender model using User-Based Collaborative Filtering (UBCF) (Default Cosine similarity)
-  ubcf_model <- Recommender(getData(ubcf_evaluation_scheme, "train"), method = "UBCF", parameter = list(method = "Jaccard"))
+  ubcf_model <- Recommender(getData(ubcf_evaluation_scheme, "train"), method = "UBCF", parameter = list(method = "pearson"))
   
   # Predict the top N recommendations for the test set
   ubcf_predictions <- predict(ubcf_model, getData(ubcf_evaluation_scheme, "known"), type = "topNList", n = 1)
@@ -104,7 +104,6 @@ average_revisits_per_user <- visit_counts %>%
   ubcf_given_items <- getData(ubcf_evaluation_scheme, "given")
 
   # Calculate the prediction accuracy for both 
-  #ubcf_error <- calcPredictionAccuracy(ubcf_predictions_filtered, getData(ubcf_evaluation_scheme, "unknown"), given =   ubcf_given_items, goodRating = 1)
   ubcf_error <- calcPredictionAccuracy(ubcf_predictions, getData(ubcf_evaluation_scheme, "unknown"), given = ubcf_given_items)
 
   # Print error 
@@ -112,7 +111,7 @@ average_revisits_per_user <- visit_counts %>%
 
 # 2.0 test IBCF model -----------------------------------------------------
     # Define evaluation scheme with k-fold cross-validation
-    ibcf_evaluation_scheme <- evaluationScheme(user_item_matrix_real, method = "cross-validation", k = 2, given = -1)
+    ibcf_evaluation_scheme <- evaluationScheme(user_item_matrix_real, method = "cross-validation", k = 2, given = 2)
     
     # Define the recommender model using Item-Based Collaborative Filtering (IBCF) (Default Cosine similarity)
     ibcf_model <- Recommender(getData(ibcf_evaluation_scheme, "train"), method = "IBCF")
@@ -154,11 +153,7 @@ average_revisits_per_user <- visit_counts %>%
     user_item_matrix_gender_aug_real <- as(user_item_matrix_gender_aug, "binaryRatingMatrix")
     
     # Define evaluation scheme with k-fold cross-validation
-    #ubcf_gender_evaluation_scheme <- evaluationScheme(user_item_matrix_gender_aug_real, method = "cross-validation", k = 2, given = -1)
     ubcf_gender_evaluation_scheme <- evaluationScheme(user_item_matrix_gender_aug_real, method = "cross-validation", k = 2, given = 3)
-    
-    # Use train test split 
-    #ubcf_gender_evaluation_scheme <- evaluationScheme(user_item_matrix_gender_aug_real, method = "split", train = 0.9, given = -1)
     
     # Train Gender Augmented UBCF Model 
     ubcf_gender_model <- Recommender(getData(ubcf_gender_evaluation_scheme, "train"), method = "UBCF", parameter = list(method = "pearson"))
@@ -199,13 +194,9 @@ average_revisits_per_user <- visit_counts %>%
     user_item_matrix_continent_real <- as(user_item_matrix_continent, "binaryRatingMatrix")
     
     # Define evaluation scheme with k-fold cross-validation
-   # ubcf_continent_evaluation_scheme <- evaluationScheme(user_item_matrix_continent_real, method = "cross-validation", k = 2, given = -1)
     ubcf_continent_evaluation_scheme <- evaluationScheme(user_item_matrix_continent_real, method = "cross-validation", k = 3, given = 1)
     
-    # Use train test split 
-    #ubcf_gender_evaluation_scheme <- evaluationScheme(user_item_matrix_gender_aug_real, method = "split", train = 0.9, given = -1)
-    
-    # Train Gender Augmented UBCF Model 
+    # Train Gender& Continent Augmented UBCF Model 
     ubcf_continent_model <- Recommender(getData(ubcf_continent_evaluation_scheme, "train"), method = "UBCF", parameter = list(method = "pearson"))
     
     # Predict the top N recommendations for the test set
@@ -231,8 +222,7 @@ average_revisits_per_user <- visit_counts %>%
     #pop_evaluation_scheme <- evaluationScheme(user_item_matrix_real, method = "split", train = 0.9, given = -1)
     
     # Define evaluation scheme with k-fold cross-validation
-    #pop_evaluation_scheme <- evaluationScheme(user_item_matrix_real, method = "cross-validation", k = 2, given = -1)
-    pop_evaluation_scheme <- evaluationScheme(user_item_matrix_real, method = "cross-validation", k = 3, given = -1)
+    pop_evaluation_scheme <- evaluationScheme(user_item_matrix_real, method = "cross-validation", k = 3, given = 1)
     
     # Define the recommender model using Popular method
     popular_model <- Recommender(getData(pop_evaluation_scheme, "train"), method = "POPULAR")
@@ -250,8 +240,8 @@ average_revisits_per_user <- visit_counts %>%
     popular_given_items <- getData(pop_evaluation_scheme, "given")
     
     # Calculate the prediction accuracy
-    #popular_error <- calcPredictionAccuracy(popular_predictions, getData(pop_evaluation_scheme, "unknown"), given =  popular_given_items )
-    popular_error <- calcPredictionAccuracy(popular_predictions, getData(pop_evaluation_scheme, "unknown"), given =  -1)
+    popular_error <- calcPredictionAccuracy(popular_predictions, getData(pop_evaluation_scheme, "unknown"), given =  popular_given_items )
+    popular_error <- calcPredictionAccuracy(popular_predictions, getData(pop_evaluation_scheme, "unknown"), given =  1)
     
     #Print 
     print(popular_error)
