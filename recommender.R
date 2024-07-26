@@ -34,7 +34,9 @@ user_item_df <- activity_df %>%
 
 # Create user item matrix
 user_item_matrix <- as.matrix(user_item_df[, -1])
-user_item_matrix_real  <- as(user_item_matrix, "binaryRatingMatrix")
+
+# Suppress warnings during the conversion to binaryRatingMatrix
+user_item_matrix_real <- suppressWarnings(as(user_item_matrix, "binaryRatingMatrix"))
 
 # Train Models and generate predictions ------------------------------------------------------------
 # Train ICBF model 
