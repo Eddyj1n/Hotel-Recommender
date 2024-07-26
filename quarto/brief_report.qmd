@@ -1,0 +1,145 @@
+---
+title: "Methodology"
+format: 
+  html:
+    embed-resources: true
+author: "Edward Jin"
+editor: visual
+echo: false
+warning: false
+messge: false
+---
+
+## Summary 
+
+The practical exercise involves predicting the next hotel site a website user will visit. This problem is framed as a recommendation problem, aiming to produce the next best recommendation given the dataset. After evaluating multiple candidate models, the final model selected for recommending the next best hotel to users is an Item-Based Collaborative Filtering Approach (IBCF). This method balances robustness, accuracy, and the time available to train and deploy the model.
+
+## Key Insights and Assumptions
+
+- Given no timestamp was provided on users' hotel browsing history, no sequence is assumed.
+- Popularity (number of hotel website visits) is positively correlated with the star rating of the hotel.
+- Each website user has, on average, 3 hotel website interactions.
+
+## Model Justification
+
+The IBCF model is chosen as it is suitable for datasets where there are many users and fewer items. This implies that finding similar hotels to recommend to website users is relatively easier than finding similar users, especially given that each user only has, on average, 3 hotel website interactions.
+
+This section briefly covers other approaches that were tested and those that were not.
+
+### Alternative Models Considered
+
+#### Untested Model
+
+- **Content-based recommendation**: This method tends to work well when the item feature space is large. Given we have only one feature on hotels (their star rating), this method was not explored. Additionally, star rating was found to be positively correlated with hotel site visits, where popularity is implicitly captured by the IBCF approach. Therefore, a content-based recommendation was not pursued in the interest of time.
+
+#### Tested Models
+
+The following candidate models, aside from IBCF, were tested:
+
+- **User-Based Collaborative Filtering (UBCF)**: This model finds similar users to make recommendations.
+- **Popular Model**: This non-personalised recommender suggests the most popular hotel website that the user hasn't visited. This was tested as only 1 user out of 4544 users had a repeat hotel site visit.
+- **Random Model**: This model provides random recommendations to serve as a benchmark.
+
+Based on the precision-recall chart below for recommending n=1, 2, and 3 hotels, we observe that the IBCF significantly outperforms other models in all aspects. A 90-10% training test-split was used.
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(recommenderlab)
+
+# Read in data sets 
+users_df <- read.delim("~/xero_assessment/data/users.txt")
+hotels_df <- read.delim("~/xero_assessment/data/hotels.txt")
+activity_df <- read.delim("~/xero_assessment/data/activity.txt")
+
+# Create a user-item matrix
+  user_item_df <- activity_df %>%
+    mutate(value = 1) %>%
+    group_by(user, hotel) %>%
+    summarise(value = sum(value), .groups = 'drop') %>%
+    pivot_wider(names_from = hotel, values_from = value, values_fill = list(value = 0))  
+  
+  # Convert to matrix format suitable for recommenderlab
+user_item_matrix <- as.matrix(user_item_df[, -1])
+user_item_matrix_real <- as(user_item_matrix, "binaryRatingMatrix") # Check this 
+
+# Define evaluation scheme with k-fold cross-validation
+evaluation_scheme <- evaluationScheme(user_item_matrix_real, method = "split", train = 0.9, given = -1)
+
+# Specify algorithms to score
+algorithms <- list(
+  "user-based CF" = list(name = "UBCF", param = list(method = "Cosine",nn = 30)),
+  "item-based CF" = list(name = "IBCF", param = list(method = "Cosine",k = 30)),
+  "random items" = list(name = "RANDOM", param = NULL),
+  "popular items" = list(name = "POPULAR", param = NULL)
+)
+
+  # Similarity Measures 
+  similarity_algorithms <- list(
+    "item-based CF - Jaccard" = list(name = "IBCF", param = list(method = "Jaccard",k = 30)),
+    "item-based CF - Cosine" = list(name = "IBCF", param = list(method = "cosine",k = 30)),
+    "item-based CF - Pearson"  = list(name = "IBCF", param = list(method = "pearson",k = 30)),
+    "opular items" = list(name = "POPULAR", param = NULL)
+  )
+
+    # Train and score algorithms, grabbing top 1 recommendation 
+  results <- evaluate(evaluation_scheme, algorithms, type = "topNList",  n=c(1, 2,3))
+
+  
+  # Plot results for precision and recall
+  plot(results, "prec/rec", annotate = 3, legend = "topleft")
+  
+
+```
+
+
+Gender and Home Continent were also provided in the dataset. However, to incorporate these demographic features, a hybrid approach would be needed to weight different similarity measures, involving significant time resources in hyperparameter tuning.
+
+To determine if there is any worthwhile uplift by introducing continent and gender into the model, the UBCF model was pre-filtered by the most common gender (male) and continent. Running the UBCF model on these clusters resulted in negligible uplift in model performance. Hence, gender and home continent data are not used in the final model.
+```{r}
+# Create the table manually
+# Load the gt package
+library(gt)
+
+# Create the table manually
+combined_metrics <- data.frame(
+  Model = c("UBCF_Gender", "UBCF_Continent"),
+  Precision = c(0.021, 0.0331),
+  Recall = c(0.021, 0.033)
+)
+
+# Display the table using gt
+ gt(combined_metrics) %>%
+  tab_header(
+    title = "Model Precision and Recall Metrics"
+  ) %>%
+  fmt_number(
+    columns = c("Precision", "Recall"),
+    decimals = 3
+  ) %>%
+  cols_label(
+    Model = "Model",
+    Precision = "Precision",
+    Recall = "Recall"
+  )
+
+
+```
+
+As a side note, the cosine similarity measure was selected for the IBCF model as it yielded the best diagnostics based on the chart below.
+```{r}
+  simiarlity_results <-evaluate(evaluation_scheme, similarity_algorithms, type = "topNList",  n=c(1, 2,3))
+  plot( simiarlity_results , "prec/rec", annotate = 3, legend = "topleft")
+```
+
+
+## Potential Improvements
+
+### Limitations and Next Steps
+
+- **Cold-Start Problem**: The IBCF approach has a cold-start problem where if a new user or hotel enters, there will be no recommendation. To address this, a popularity-based recommendation can be used until the user generates sufficient interaction history. Additionally, hybrid models can be explored, such as context-based recommendations and other similarity measures. This requires more time to fine-tune the weights. Additionally, factorisation methods can also be used to identify latent preferences.
+- **Bias Towards Popular Hotels**: The IBCF approach inherently biases towards more popular hotels, reducing the personalisation in recommendations. A hybrid approach and obtaining more features can reduce this bias.
+
+### Hyper-parameter Tuning
+
+- Setting the number of nearest neighbours for the hotel recommendations is a parameter that can be tuned to balance noise and potential similar hotels.

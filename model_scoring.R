@@ -139,10 +139,6 @@ average_revisits_per_user <- visit_counts %>%
       filter(gender == 1) %>%  
       select(-c("gender"))
     
-    # Augment gender user-item matrix by home continent information
-    user_item_continent_df <- user_item_aug_gender_df %>% 
-      left_join(continent_one_hot_encode , by = c("user")) 
-    
     # Convert to matrix format suitable for recommenderlab
     user_item_matrix_gender_aug <- as.matrix(user_item_aug_gender_df[, -1])
     user_item_matrix_gender_aug_real <- as(user_item_matrix_gender_aug, "binaryRatingMatrix")
