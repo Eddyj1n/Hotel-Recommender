@@ -16,7 +16,7 @@ users_df <- read.delim("~/xero_assessment/data/users.txt")
 hotels_df <- read.delim("~/xero_assessment/data/hotels.txt")
 activity_df <- read.delim("~/xero_assessment/data/activity.txt")
 
-# Feature Engineer --------------------------------------------------------
+# EDA --------------------------------------------------------
 
 # Merge datasets to create a unified panel
 merged_df <- activity_df %>%
@@ -41,12 +41,20 @@ interaction_counts_summary <- interaction_counts %>%
   group_by(num_interactions) %>% 
   summarise(total = n())
 
-# Simple EDA: Check the count of interactions  --------------------------------------------------------------
-
 # Group by user and hotel, and count the number of visits
 visit_counts <- activity_df %>%
   group_by(user, hotel) %>%
   summarise(visits = n(), .groups = 'drop')
+
+# Group users by gender and count 
+user_gender_count <- users_df %>% 
+  group_by(gender) %>%  
+  summarise(count = n())
+
+# Group users by continent and count 
+user_continent_count <- users_df %>% 
+  group_by(home.continent) %>%  
+  summarise(count = n())
 
 # Check average revisits
 average_revisits_per_user <- visit_counts %>%
@@ -64,7 +72,7 @@ average_revisits_per_user <- visit_counts %>%
 
 # Test Model 1: User based Collaborative Filtering Recommendation (User Interactions Only)  -------------------------------------
 
-  # Filter out users with fewer than three interactions
+  # Filter out users with fewer than three interactions (optional)
   filtered_activity_df <- activity_df %>%
     group_by(user) %>%
     #filter(n() >= 3) %>%
@@ -111,13 +119,13 @@ average_revisits_per_user <- visit_counts %>%
 
 # 2.0 test IBCF model -----------------------------------------------------
     # Define evaluation scheme with k-fold cross-validation
-    ibcf_evaluation_scheme <- evaluationScheme(user_item_matrix_real, method = "cross-validation", k = 2, given = 2)
+    ibcf_evaluation_scheme <- evaluationScheme(user_item_matrix_real, method = "cross-validation", k = 3, given = 1)
     
     # Define the recommender model using Item-Based Collaborative Filtering (IBCF) (Default Cosine similarity)
     ibcf_model <- Recommender(getData(ibcf_evaluation_scheme, "train"), method = "IBCF")
     
-    # Use cosine similarity
-    ibcf_model <- Recommender(getData(ibcf_evaluation_scheme, "train"), method = "IBCF", parameter = list(method = "Jaccard"))
+    # Use Jaccard similarity
+    ibcf_model <- Recommender(getData(ibcf_evaluation_scheme, "train"), method = "IBCF", parameter = list(method = "Jaccarb"))
     
     # Predict the top N recommendations for the test set
     ibcf_predictions <- predict(ibcf_model, getData(ibcf_evaluation_scheme, "known"), type = "topNList", n = 1)
@@ -134,89 +142,14 @@ average_revisits_per_user <- visit_counts %>%
     ibcf_given_items <- getData(ibcf_evaluation_scheme, "given")
   
     # Calculate the prediction accuracy
-    ibcf_error <- calcPredictionAccuracy(ibcf_predictions, getData(ubcf_evaluation_scheme, "unknown"), given = ibcf_given_items)
+    ibcf_error <- calcPredictionAccuracy(ibcf_predictions, getData(ibcf_evaluation_scheme, "unknown"), given = ibcf_given_items)
+    ibcf_error <- calcPredictionAccuracy(ibcf_predictions, getData(ibcf_evaluation_scheme, "unknown"), given = 1)
     
     # Print Error
     print(ibcf_error)
     
-# 3. Augmented UBCF model (Gender) ----------------------------------------
-    
-    # One-hot encode gender and augment matrix 
-    # Augment user item matrix by gender 
-    user_item_aug_gender_df <- user_item_df %>% 
-      left_join(users_df, by = c("user")) %>%  
-      select(-c("home.continent")) %>%  
-      mutate(gender = case_when(gender =="male"~1, TRUE ~ 0))
-    
-    # Convert to matrix format suitable for recommenderlab
-    user_item_matrix_gender_aug <- as.matrix(user_item_aug_gender_df[, -1])
-    user_item_matrix_gender_aug_real <- as(user_item_matrix_gender_aug, "binaryRatingMatrix")
-    
-    # Define evaluation scheme with k-fold cross-validation
-    ubcf_gender_evaluation_scheme <- evaluationScheme(user_item_matrix_gender_aug_real, method = "cross-validation", k = 2, given = 3)
-    
-    # Train Gender Augmented UBCF Model 
-    ubcf_gender_model <- Recommender(getData(ubcf_gender_evaluation_scheme, "train"), method = "UBCF", parameter = list(method = "pearson"))
-    
-    # Predict the top N recommendations for the test set
-    ubcf_gender_predictions <- predict(ubcf_gender_model, getData(ubcf_gender_evaluation_scheme, "known"), type = "topNList", n = 1)
-    
-    # Get the top 1 recommendation for each user 
-    ucbf_gender_top_1_pred <- bestN(ubcf_gender_predictions, n = 1)
-    
-    # Get Given items 
-    ubcf_gender_given_items <- getData(ubcf_gender_evaluation_scheme, "given")
-    
-    # Calculate the prediction accuracy
-    #ubcf_gender_error <- calcPredictionAccuracy(ubcf_gender_predictions, getData(ubcf_gender_evaluation_scheme, "unknown"), given = ubcf_gender_given_items)
-    ubcf_gender_error <- calcPredictionAccuracy(ubcf_gender_predictions, getData(ubcf_gender_evaluation_scheme, "unknown"), given = 3)
-    
-    #Print 
-    print(ubcf_gender_error)
 
-# 4. Augmented UBCF model with Gender and Continents ----------------------------------------
-    
-    # One-hot encode continent  
-    continent_one_hot_encode <- users_df%>%
-      select(user, home.continent) %>% 
-      mutate(home.continent = home.continent+1000) %>% # To differentiate colnames between hotels
-      mutate(value = 1) %>%
-      group_by(user, home.continent) %>%
-      summarise(value = sum(value), .groups = 'drop') %>%
-      pivot_wider(names_from = home.continent, values_from = value, values_fill = list(value = 0))  
-    
-    # Augment gender user-item matrix by home continent information
-    user_item_continent_df <- user_item_aug_gender_df %>% 
-      left_join(continent_one_hot_encode , by = c("user")) 
-    
-    # Convert to matrix format suitable for recommenderlab
-    user_item_matrix_continent <- as.matrix(user_item_continent_df[, -1])
-    user_item_matrix_continent_real <- as(user_item_matrix_continent, "binaryRatingMatrix")
-    
-    # Define evaluation scheme with k-fold cross-validation
-    ubcf_continent_evaluation_scheme <- evaluationScheme(user_item_matrix_continent_real, method = "cross-validation", k = 3, given = 1)
-    
-    # Train Gender& Continent Augmented UBCF Model 
-    ubcf_continent_model <- Recommender(getData(ubcf_continent_evaluation_scheme, "train"), method = "UBCF", parameter = list(method = "pearson"))
-    
-    # Predict the top N recommendations for the test set
-    ubcf_continent_predictions <- predict(ubcf_continent_model, getData(ubcf_continent_evaluation_scheme, "known"), type = "topNList", n = 1)
-    
-    # Get the top 1 recommendation for each user 
-    ucbf_continent_top_1_pred <- bestN(ubcf_continent_predictions, n = 1)
-    
-    # Get Given items 
-    ubcf_continent_given_items <- getData(ubcf_continent_evaluation_scheme, "given")
-    
-    # Calculate the prediction accuracy
-    #ubcf_continent_error <- calcPredictionAccuracy( ubcf_continent_predictions, getData(ubcf_continent_evaluation_scheme, "unknown"), given = ubcf_continent_given_items)
-    ubcf_continent_error <- calcPredictionAccuracy( ubcf_continent_predictions, getData(ubcf_continent_evaluation_scheme, "unknown"), given = 1)
-
-    #Print 
-    print(ubcf_continent_error)
-    
-
-# 5. Test Popular Method --------------------------------------------------
+# 3. Test Popular Method --------------------------------------------------
     
     # Define evaluation scheme with 80% train and 20% test split
     #pop_evaluation_scheme <- evaluationScheme(user_item_matrix_real, method = "split", train = 0.9, given = -1)
@@ -228,7 +161,7 @@ average_revisits_per_user <- visit_counts %>%
     popular_model <- Recommender(getData(pop_evaluation_scheme, "train"), method = "POPULAR")
     
     # Predict the top N recommendations for the test set
-    popular_predictions <- predict(popular_model, getData(pop_evaluation_scheme, "known"), type = "topNList", n = 1)
+    popular_predictions <- predict(popular_model, getData(ibcf_evaluation_scheme, "known"), type = "topNList", n = 1)
     
     # Get the top 1 recommendation for each user
     popular_top_1_pred <- bestN(popular_predictions, n = 1)
@@ -237,16 +170,16 @@ average_revisits_per_user <- visit_counts %>%
     top_1_recommendations <- as(popular_top_1_pred, "list")
     
     # Get Given items 
-    popular_given_items <- getData(pop_evaluation_scheme, "given")
+    popular_given_items <- getData(ibcf_evaluation_scheme, "given")
     
     # Calculate the prediction accuracy
-    popular_error <- calcPredictionAccuracy(popular_predictions, getData(pop_evaluation_scheme, "unknown"), given =  popular_given_items )
+    #popular_error <- calcPredictionAccuracy(popular_predictions, getData(pop_evaluation_scheme, "unknown"), given =  popular_given_items )
     popular_error <- calcPredictionAccuracy(popular_predictions, getData(pop_evaluation_scheme, "unknown"), given =  1)
     
     #Print 
     print(popular_error)
     
-#  Train Hybrid Recommender ---------------------------------------------
+#  4. Train Hybrid Recommender ------------------------------------------------
     hybrid_model <- HybridRecommender(
       Recommender(getData(ubcf_evaluation_scheme, "train"), method = "UBCF", parameter = list(method = "cosine")),
       Recommender(getData(pop_evaluation_scheme, "train"), method = "POPULAR"),
@@ -264,4 +197,84 @@ average_revisits_per_user <- visit_counts %>%
     
     # Print Hybrid Error 
     print(hybrid_error)
+    
+# 5. Test: Train gender clustered model - Males ---------------------------------------------
+    user_item_aug_gender_df <- user_item_df %>% 
+      left_join(users_df, by = c("user")) %>%  
+      select(-c("home.continent")) %>%  
+      mutate(gender = case_when(gender =="male"~1, TRUE ~ 0)) %>% 
+      filter(gender == 1) %>%  
+      select(-c("gender"))
+    
+    # Augment gender user-item matrix by home continent information
+    user_item_continent_df <- user_item_aug_gender_df %>% 
+      left_join(continent_one_hot_encode , by = c("user")) 
+    
+    # Convert to matrix format suitable for recommenderlab
+    user_item_matrix_gender_aug <- as.matrix(user_item_aug_gender_df[, -1])
+    user_item_matrix_gender_aug_real <- as(user_item_matrix_gender_aug, "binaryRatingMatrix")
+    
+    # Define evaluation scheme with k-fold cross-validation
+    ubcf_gender_evaluation_scheme <- evaluationScheme(user_item_matrix_gender_aug_real, method = "cross-validation", k = 2, given = -1)
+    
+    # Train Gender Augmented UBCF Model 
+    ubcf_gender_model <- Recommender(getData(ubcf_gender_evaluation_scheme, "train"), method = "UBCF", parameter = list(method = "pearson"))
+    
+    # Predict the top N recommendations for the test set
+    ubcf_gender_predictions <- predict(ubcf_gender_model, getData(ubcf_gender_evaluation_scheme, "known"), type = "topNList", n = 1)
+    
+    # Get the top 1 recommendation for each user 
+    ucbf_gender_top_1_pred <- bestN(ubcf_gender_predictions, n = 1)
+    
+    # Get Given items 
+    ubcf_gender_given_items <- getData(ubcf_gender_evaluation_scheme, "given")
+    
+    # Calculate the prediction accuracy
+    ubcf_gender_error <- calcPredictionAccuracy(ubcf_gender_predictions, getData(ubcf_gender_evaluation_scheme, "unknown"), given = ubcf_gender_given_items)
+    
+    #Print 
+    print(ubcf_gender_error)
+
+    # 5. Test: Continent clustered model - Popular Continent 7 ---------------------------------------------
+    user_item_continent_df <- user_item_df %>% 
+      left_join(users_df, by = c("user")) %>%  
+      select(-c("gender")) %>%  
+      filter(home.continent ==2) %>%  
+      select(-c("home.continent"))
+    
+    # Convert to matrix format suitable for recommenderlab
+    user_item_matrix_continent <- as.matrix(user_item_continent_df[, -1])
+    user_item_matrix_continent_real <- as(user_item_matrix_continent, "binaryRatingMatrix")
+    
+    # Define evaluation scheme with k-fold cross-validation
+    ubcf_continent_evaluation_scheme <- evaluationScheme(user_item_matrix_continent_real, method = "cross-validation", k = 3, given = -1)
+    
+    # Train Gender& Continent Augmented UBCF Model 
+    ubcf_continent_model <- Recommender(getData(ubcf_continent_evaluation_scheme, "train"), method = "UBCF", parameter = list(method = "pearson"))
+    
+    # Predict the top N recommendations for the test set
+    ubcf_continent_predictions <- predict(ubcf_continent_model, getData(ubcf_continent_evaluation_scheme, "known"), type = "topNList", n = 1)
+    
+    # Get the top 1 recommendation for each user 
+    ucbf_continent_top_1_pred <- bestN(ubcf_continent_predictions, n = 1)
+    
+    # Get Given items 
+    ubcf_continent_given_items <- getData(ubcf_continent_evaluation_scheme, "given")
+    
+    # Calculate the prediction accuracy
+    ubcf_continent_error <- calcPredictionAccuracy( ubcf_continent_predictions, getData(ubcf_continent_evaluation_scheme, "unknown"), given = ubcf_continent_given_items)
+    
+    #Print 
+    print(ubcf_continent_error)
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     
