@@ -70,16 +70,10 @@ average_revisits_per_user <- visit_counts %>%
 #        y = "Density") +
 #   theme_minimal()
 
-# Test Model 1: User based Collaborative Filtering Recommendation (User Interactions Only)  -------------------------------------
+# Test Models 1: User based Collaborative Filtering Recommendation (UCBF), ICBF, Popular and Random  -------------------------------------
 
-  # Filter out users with fewer than three interactions (optional)
-  filtered_activity_df <- activity_df %>%
-    group_by(user) %>%
-    #filter(n() >= 3) %>%
-    ungroup()
-  
   # Create a user-item matrix
-  user_item_df <- filtered_activity_df %>%
+  user_item_df <- activity_df %>%
     mutate(value = 1) %>%
     group_by(user, hotel) %>%
     summarise(value = sum(value), .groups = 'drop') %>%
@@ -92,92 +86,31 @@ average_revisits_per_user <- visit_counts %>%
   user_item_matrix_real <- as(user_item_matrix, "binaryRatingMatrix") # Check this 
   
   # Define evaluation scheme with k-fold cross-validation
-  ubcf_evaluation_scheme <- evaluationScheme(user_item_matrix_real, method = "cross-validation", k = 3, given = 2)
+  evaluation_scheme <- evaluationScheme(user_item_matrix_real, method = "split", train = 0.9, given = -1)
   
-  # Define the recommender model using User-Based Collaborative Filtering (UBCF) (Default Cosine similarity)
-  ubcf_model <- Recommender(getData(ubcf_evaluation_scheme, "train"), method = "UBCF", parameter = list(method = "pearson"))
+  # Specify algorithms to score
+  algorithms <- list(
+    "user-based CF" = list(name = "UBCF", param = list(method = "Cosine",nn = 30)),
+    "item-based CF" = list(name = "IBCF", param = list(method = "Cosine",k = 30)),
+    "random items" = list(name = "RANDOM", param = NULL),
+    "popular items" = list(name = "POPULAR", param = NULL)
+  )
   
-  # Predict the top N recommendations for the test set
-  ubcf_predictions <- predict(ubcf_model, getData(ubcf_evaluation_scheme, "known"), type = "topNList", n = 1)
-
-  # Remove previously interacted hotels from the recommendations
-  ubcf_predictions_filtered <- removeKnownItems(ubcf_predictions, getData(ubcf_evaluation_scheme,"known"))
+  # Similarity Measures 
+  similarity_algorithms <- list(
+    "item-based CF - Jaccard" = list(name = "IBCF", param = list(method = "Jaccard",k = 30)),
+    "item-based CF - Cosine" = list(name = "IBCF", param = list(method = "cosine",k = 30)),
+    "item-based CF - Pearson"  = list(name = "IBCF", param = list(method = "pearson",k = 30)),
+    "popular items" = list(name = "POPULAR", param = NULL)
+  )
   
-  # Get the top 1 recommendation for each user 
-  ucbf_top_1_pred <- bestN(ubcf_predictions_filtered, n=1)
-    
-# 1.1 Evaluate UBCF Model -------------------------------------------------
+  # Train and score algorithms, grabbing top 1 recommendation 
+  results <- evaluate(evaluation_scheme, algorithms, type = "topNList",  n=c(1, 2,3))
+  simiarlity_results <-evaluate(evaluation_scheme, similarity_algorithms, type = "topNList",  n=c(1, 2,3))
   
-  # Obtain the number of items given from the evaluation scheme
-  ubcf_given_items <- getData(ubcf_evaluation_scheme, "given")
-
-  # Calculate the prediction accuracy for both 
-  ubcf_error <- calcPredictionAccuracy(ubcf_predictions, getData(ubcf_evaluation_scheme, "unknown"), given = ubcf_given_items)
-
-  # Print error 
-  print(ubcf_error )
-
-# 2.0 test IBCF model -----------------------------------------------------
-    # Define evaluation scheme with k-fold cross-validation
-    ibcf_evaluation_scheme <- evaluationScheme(user_item_matrix_real, method = "cross-validation", k = 3, given = 1)
-    
-    # Define the recommender model using Item-Based Collaborative Filtering (IBCF) (Default Cosine similarity)
-    ibcf_model <- Recommender(getData(ibcf_evaluation_scheme, "train"), method = "IBCF")
-    
-    # Use Jaccard similarity
-    ibcf_model <- Recommender(getData(ibcf_evaluation_scheme, "train"), method = "IBCF", parameter = list(method = "Jaccarb"))
-    
-    # Predict the top N recommendations for the test set
-    ibcf_predictions <- predict(ibcf_model, getData(ibcf_evaluation_scheme, "known"), type = "topNList", n = 1)
-    
-    # Remove previously interacted hotels from the recommendations
-    ibcf_predictions_filtered <- removeKnownItems(ibcf_predictions, getData(ibcf_evaluation_scheme,"known"))
-    
-    # Get the top 1 recommendation for each user 
-    ibcf_top_1_pred <- bestN(ibcf_predictions_filtered, n=1)
-
-# 2.1 Evalute IBCF Model ------------------------------------------------------
-   
-    # Get Given items 
-    ibcf_given_items <- getData(ibcf_evaluation_scheme, "given")
-  
-    # Calculate the prediction accuracy
-    ibcf_error <- calcPredictionAccuracy(ibcf_predictions, getData(ibcf_evaluation_scheme, "unknown"), given = ibcf_given_items)
-    ibcf_error <- calcPredictionAccuracy(ibcf_predictions, getData(ibcf_evaluation_scheme, "unknown"), given = 1)
-    
-    # Print Error
-    print(ibcf_error)
-    
-
-# 3. Test Popular Method --------------------------------------------------
-    
-    # Define evaluation scheme with 80% train and 20% test split
-    #pop_evaluation_scheme <- evaluationScheme(user_item_matrix_real, method = "split", train = 0.9, given = -1)
-    
-    # Define evaluation scheme with k-fold cross-validation
-    pop_evaluation_scheme <- evaluationScheme(user_item_matrix_real, method = "cross-validation", k = 3, given = 1)
-    
-    # Define the recommender model using Popular method
-    popular_model <- Recommender(getData(pop_evaluation_scheme, "train"), method = "POPULAR")
-    
-    # Predict the top N recommendations for the test set
-    popular_predictions <- predict(popular_model, getData(ibcf_evaluation_scheme, "known"), type = "topNList", n = 1)
-    
-    # Get the top 1 recommendation for each user
-    popular_top_1_pred <- bestN(popular_predictions, n = 1)
-    
-    # Extract the top 1 recommendation for each user
-    top_1_recommendations <- as(popular_top_1_pred, "list")
-    
-    # Get Given items 
-    popular_given_items <- getData(ibcf_evaluation_scheme, "given")
-    
-    # Calculate the prediction accuracy
-    #popular_error <- calcPredictionAccuracy(popular_predictions, getData(pop_evaluation_scheme, "unknown"), given =  popular_given_items )
-    popular_error <- calcPredictionAccuracy(popular_predictions, getData(pop_evaluation_scheme, "unknown"), given =  1)
-    
-    #Print 
-    print(popular_error)
+  # Plot results for precision and recall
+  plot(results, "prec/rec", annotate = 3, legend = "topleft")
+  plot( simiarlity_results , "prec/rec", annotate = 3, legend = "topleft")
     
 #  4. Train Hybrid Recommender ------------------------------------------------
     hybrid_model <- HybridRecommender(
