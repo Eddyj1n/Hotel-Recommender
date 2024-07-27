@@ -1,4 +1,4 @@
-# Xero Assessment: Edward Jin's Submission
+# Simple Hotel Recommender
 
 ## Prerequisites
 
