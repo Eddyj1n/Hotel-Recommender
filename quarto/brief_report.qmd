@@ -22,9 +22,11 @@ The practical exercise involves predicting the next hotel site a website user wi
 
 ## Model Justification
 
-The IBCF model is chosen as it is suitable for datasets where there are many users and fewer items. This implies that finding similar hotels to recommend to website users is relatively easier than finding similar users, especially given that each user only has, on average, 3 hotel website interactions.
+The IBCF model is chosen as it is suitable for the dataset where there are many users (4544) and fewer items (66 hotels). This implies that finding similar hotels to recommend to website users is relatively easier than finding similar users, especially given that each user only has, on average, 3 hotel website interactions.
 
-This section briefly covers other approaches that were tested and those that were not.
+Candidate models were also compared with, using precision as the main metric. Precision is chosen as it is more important here to recommend a hotel that the user is likely to interact with next, ensuring that the recommendations are relevant and likely to result in a positive user experience.
+
+The section below briefly covers other approaches that were tested and those that were not.
 
 ### Alternative Models Considered
 
@@ -51,6 +53,9 @@ library(recommenderlab)
 users_df <- read.delim("~/xero_assessment/data/users.txt")
 hotels_df <- read.delim("~/xero_assessment/data/hotels.txt")
 activity_df <- read.delim("~/xero_assessment/data/activity.txt")
+
+# set seed
+set.seed(123)
 
 # Create a user-item matrix
   user_item_df <- activity_df %>%
@@ -105,7 +110,7 @@ library(gt)
 combined_metrics <- data.frame(
   Model = c("UBCF_Gender", "UBCF_Continent"),
   Precision = c(0.021, 0.0331),
-  Recall = c(0.021, 0.033)
+  Recall = c(0.020, 0.031)
 )
 
 # Display the table using gt

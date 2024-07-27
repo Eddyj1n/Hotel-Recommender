@@ -90,6 +90,7 @@ average_revisits_per_user <- visit_counts %>%
   
   # Specify algorithms to score
   algorithms <- list(
+    "ALS"   = list(name = "ALS_implicit", param = list(n_factors=10))
     "user-based CF" = list(name = "UBCF", param = list(method = "Cosine",nn = 30)),
     "item-based CF" = list(name = "IBCF", param = list(method = "Cosine",k = 30)),
     "random items" = list(name = "RANDOM", param = NULL),
